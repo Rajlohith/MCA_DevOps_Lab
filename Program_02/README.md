@@ -10,7 +10,6 @@ The application is a Node.js Express application that runs on port `3000`.
 
 ```text
 program-2/
-
 ├── Dockerfile
 ├── package.json
 ├── package-lock.json
@@ -34,43 +33,66 @@ program-2/
 
 ## 1. Build the Docker Image
 
-Open the terminal in the project directory and execute:
+The Dockerfile contains two stages: `builder` and `production`.
+
+### Build the Builder Stage
+
+To build only the builder stage, execute:
 
 ```bash
-docker build -t program-2 .
+docker build --target builder -t program-2 .
 ```
 
 Here:
 
 * `docker build` – Builds a Docker image.
+* `--target builder` – Stops the multi-stage build at the `builder` stage.
 * `-t program-2` – Gives the image the name `program-2`.
 * `.` – Uses the current directory as the build context.
 
-During the build process, Docker executes the two stages defined in the Dockerfile.
+The builder stage contains the Node.js environment, application source code, and installed dependencies.
 
-The first stage is the **Build Stage**:
+To run the builder-stage image:
 
-```dockerfile
-FROM node:20-alpine AS builder
+```bash
+docker run -d -p 3000:3000 program-2
 ```
 
-This stage:
+Verify that the container is running:
 
-* Creates a Node.js 20 Alpine environment.
-* Sets `/app` as the working directory.
-* Copies `package.json` and `package-lock.json`.
-* Installs the required dependencies using `npm install`.
-* Copies the application source code.
-
-The second stage is the **Production Stage**:
-
-```dockerfile
-FROM node:20-alpine
+```bash
+docker ps
 ```
 
-This stage creates the final Docker image and copies the required files from the builder stage.
+The application can be tested at:
 
-To verify the image:
+```text
+http://localhost:3000
+```
+
+### Build the Production Stage
+
+To build the final production stage, execute:
+
+```bash
+docker build --target production -t program-2 .
+```
+
+Here:
+
+* `--target production` – Builds the final `production` stage.
+* `-t program-2` – Gives the image the name `program-2`.
+* `.` – Uses the current directory as the build context.
+
+The production stage copies the required package files, installed dependencies, and application source code from the `builder` stage.
+
+Run the production image using:
+
+```bash
+docker run -d -p 3000:3000 program-2
+```
+
+Verify the image:
 
 ```bash
 docker images
@@ -82,19 +104,28 @@ The image should appear with the name:
 program-2
 ```
 
----
+### Production-Only Demonstration
+
+For the final demonstration, comment out the builder-stage build and run commands above and execute only:
+
+```bash
+docker build --target production -t program-2 .
+docker run -d -p 3000:3000 program-2
+```
+
+Note: `--target production` still uses the `builder` stage internally because the production stage contains `COPY --from=builder`. Commenting out the builder commands means that you are not manually building or running the builder image; Docker still executes the builder stage automatically as part of the production build.
 
 ## 2. Run the Docker Container
 
-Run the container using:
+Run the production container using:
 
 ```bash
-docker run -it -p 3000:3000 program-2
+docker run -d -p 3000:3000 program-2
 ```
 
 Here:
 
-- `-it` – Runs the container in interactive mode with a terminal attached.
+* `-d` – Runs the container in detached mode.
 * `-p 3000:3000` – Maps port `3000` of the host machine to port `3000` inside the container.
 * `program-2` – Specifies the Docker image to use.
 
@@ -109,8 +140,6 @@ The container should appear with port mapping similar to:
 ```text
 0.0.0.0:3000->3000/tcp
 ```
-
----
 
 ## 3. Test the Application
 
@@ -260,9 +289,9 @@ docker rmi program-2
 
 ## 9. Understanding the Multi-Stage Dockerfile
 
-The Dockerfile contains two stages.
+The Dockerfile contains two named stages: `builder` and `production`.
 
-### Stage 1 – Build Stage
+### Stage 1 – Builder Stage
 
 ```dockerfile
 FROM node:20-alpine AS builder
@@ -274,6 +303,10 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
+
+EXPOSE 3000
+
+CMD ["node", "src/index.js"]
 ```
 
 The first stage creates the build environment.
@@ -286,34 +319,35 @@ FROM node:20-alpine AS builder
 
 uses Node.js 20 Alpine as the base image and gives this stage the name `builder`.
 
-The working directory is set to:
-
-```text
-/app
-```
-
-The package files are then copied:
+The package files are copied and the dependencies are installed using:
 
 ```dockerfile
 COPY package*.json ./
-```
-
-The application dependencies are installed using:
-
-```dockerfile
 RUN npm install
 ```
 
-Finally, the application source code is copied:
+The application source code is then copied:
 
 ```dockerfile
 COPY . .
 ```
 
+The builder stage can be built directly using:
+
+```bash
+docker build --target builder -t program-2 .
+```
+
+For demonstration purposes, this stage can also be run:
+
+```bash
+docker run -d -p 3000:3000 program-2
+```
+
 ### Stage 2 – Production Stage
 
 ```dockerfile
-FROM node:20-alpine
+FROM node:20-alpine AS production
 
 WORKDIR /app
 
@@ -333,42 +367,55 @@ The second stage creates the final production image.
 The command:
 
 ```dockerfile
+FROM node:20-alpine AS production
+```
+
+creates the named `production` stage.
+
+The files required by the application are copied from the builder stage using:
+
+```dockerfile
 COPY --from=builder
 ```
 
-copies files from the first stage into the second stage.
+The production stage can be built directly using:
 
-The package files are copied using:
-
-```dockerfile
-COPY --from=builder /app/package*.json ./
+```bash
+docker build --target production -t program-2 .
 ```
 
-The installed Node.js dependencies are copied using:
+Docker automatically executes the required `builder` stage first because the production stage depends on it.
 
-```dockerfile
-COPY --from=builder /app/node_modules ./node_modules
+The production container is then started using:
+
+```bash
+docker run -d -p 3000:3000 program-2
 ```
 
-The application source code is copied using:
+### Target-Based Build Demonstration
 
-```dockerfile
-COPY --from=builder /app/src ./src
+The two stages can be demonstrated independently:
+
+```bash
+docker build --target builder -t program-2 .
+docker run -d -p 3000:3000 program-2
 ```
 
-The application port is documented using:
+and:
 
-```dockerfile
-EXPOSE 3000
+```bash
+docker build --target production -t program-2 .
+docker run -d -p 3000:3000 program-2
 ```
 
-Finally, the Express application is started using:
+For the final production demonstration, comment out the builder-stage commands and execute only the production commands:
 
-```dockerfile
-CMD ["node", "src/index.js"]
+```bash
+docker build --target production -t program-2 .
+docker run -d -p 3000:3000 program-2
 ```
 
----
+This demonstrates that `production` is the final target while `builder` remains an internal dependency of the multi-stage build.
 
 ## 10. Advantages of Multi-Stage Docker Builds
 
@@ -424,16 +471,28 @@ docker ps -a
 docker images
 ```
 
-### Build the Docker image
+### Build the builder stage
 
 ```bash
-docker build -t program-2 .
+docker build --target builder -t program-2 .
 ```
 
-### Run the Docker container
+### Run the builder-stage image
 
 ```bash
-docker run -d -p 3000:3000 --name node-container program-2
+docker run -d -p 3000:3000 program-2
+```
+
+### Build the production stage
+
+```bash
+docker build --target production -t program-2 .
+```
+
+### Run the production container
+
+```bash
+docker run -d -p 3000:3000 program-2
 ```
 
 ### View container logs
@@ -467,7 +526,7 @@ docker rmi program-2
 After running the Docker build command:
 
 ```bash
-docker build -t program-2 .
+docker build --target production -t program-2 .
 ```
 
 the Docker image should be created successfully.
@@ -475,7 +534,7 @@ the Docker image should be created successfully.
 Run the container using:
 
 ```bash
-docker run -it 3000:3000 --name program-2
+docker run -d -p 3000:3000 program-2
 ```
 
 After running the container, open:

@@ -17,7 +17,7 @@ COPY . .
 
 
 # Stage 2: Production Stage
-FROM node:20-alpine
+FROM node:20-alpine as production
 
 # Set working directory
 WORKDIR /app
