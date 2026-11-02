@@ -1,0 +1,8 @@
+docker tag p6:latest rajlohith/p6:latest
+docker push rajlohith/p6:latest
+docker logout ghcr.io
+read -s -p "Enter GitHub PAT: " GITHUB_PAT
+printf '%s' "$GITHUB_PAT" | docker login ghcr.io -u Rajlohith --password-stdin
+unset GITHUB_PAT
+docker tag p6:latest ghcr.io/rajlohith/p6:latest
+docker push ghcr.io/rajlohith/p6:latest
